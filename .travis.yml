@@ -37,7 +37,7 @@ env:
     - CCM_CASSANDRA_VERSION=6.8.9 CCM_IS_DSE=true DSE_VERSION=6.8.9 CCM_SERVER_TYPE=dse
 
 install:
-  - pip install --user ccm
+  - pip install --user pyopenssl ndg-httpsclient pyasn1 ccm
 
 script:
   - "unset JVM_OPTS" # The Travis JVM Opts break CCM
