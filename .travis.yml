@@ -9,7 +9,7 @@ branches:
 
 sudo: required
 
-dist: trusty
+dist: bionic
 
 cache:
   directories:
