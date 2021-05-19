@@ -17,7 +17,9 @@ class ValueRowReader[T: TypeConverter](columnRef: ColumnRef) extends RowReader[T
     converter.convert(GettableData.get(
       row,
       columnRef.cqlValueName,
-      rowMetaData.codecs(columnRef.cqlValueName)))
+      rowMetaData.codecs(columnRef.cqlValueName),
+      GettableData.getColumnMetadata(columnRef.cqlValueName, Some(rowMetaData))
+    ))
 
   /** List of columns this `RowReader` is going to read.
     * Useful to avoid fetching the columns that are not needed. */

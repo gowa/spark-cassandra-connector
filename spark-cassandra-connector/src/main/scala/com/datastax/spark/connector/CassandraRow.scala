@@ -1,6 +1,7 @@
 package com.datastax.spark.connector
 
 import com.datastax.driver.core.ColumnDefinitions.Definition
+import com.datastax.driver.core.DataType.{CollectionType, Name}
 import com.datastax.driver.core._
 
 /** Represents a single row fetched from Cassandra.
@@ -99,6 +100,7 @@ final class CassandraRow(val metaData: CassandraRowMetadata, val columnValues: I
   *
   */
 case class CassandraRowMetadata(columnNames: IndexedSeq[String],
+                                columnMetadata: Option[IndexedSeq[Option[CassandraRowMetadata]]] = None,
                                 resultSetColumnNames: Option[IndexedSeq[String]] = None,
                                 // transient because codecs are not serializable and used only at Row parsing
                                 // not and option as deserialized fileld will be null not None
@@ -141,7 +143,36 @@ object CassandraRowMetadata {
     val rsColumnNames = scalaColumnDefs.map(_.getName)
     val codecs = scalaColumnDefs.map(col => CodecRegistry.DEFAULT_INSTANCE.codecFor(col.getType))
       .asInstanceOf[List[TypeCodec[AnyRef]]]
-    CassandraRowMetadata(columnNames, Some(rsColumnNames.toIndexedSeq), codecs.toIndexedSeq)
+    CassandraRowMetadata(
+      columnNames,
+      Some(scalaColumnDefs.map(_.getType).map(fromDataType(_)).toIndexedSeq),
+      Some(rsColumnNames.toIndexedSeq), codecs.toIndexedSeq
+    )
+  }
+
+  private def fromDataType(dataType: DataType): Option[CassandraRowMetadata] = {
+    import scala.collection.JavaConversions._
+    dataType match {
+      case collectionType: CollectionType =>
+        val typeArguments = collectionType.getTypeArguments.toList
+        Some(CassandraRowMetadata(
+          typeArguments.zipWithIndex.map{case(_,index) => index.toString}.toIndexedSeq,
+          Some(typeArguments.map(fromDataType(_)).toIndexedSeq)
+        ))
+      case tupleType: TupleType =>
+        val componentTypes = tupleType.getComponentTypes.toList
+        Some(CassandraRowMetadata(
+          componentTypes.zipWithIndex.map{case(_,index) => index.toString}.toIndexedSeq,
+          Some(componentTypes.map(fromDataType(_)).toIndexedSeq)
+        ))
+      case userType: UserType =>
+        val fieldNames = userType.getFieldNames
+        Some(CassandraRowMetadata(
+          fieldNames.toIndexedSeq,
+          Some(fieldNames.map{ fieldName => fromDataType(userType.getFieldType(fieldName)) }.toIndexedSeq)
+        ))
+      case _ => None
+    }
   }
 
   /**
@@ -181,13 +212,13 @@ object CassandraRow {
     if (metaData.codecs == null) {
       //that should not happen in production, but just in case
       while (i < length) {
-        data(i) = GettableData.get(row, i)
+        data(i) = GettableData.get(row, i, GettableData.getColumnMetadata(i, Some(metaData)))
         i += 1
       }
     }
     else {
       while (i < length) {
-        data(i) = GettableData.get(row, i, metaData.codecs(i))
+        data(i) = GettableData.get(row, i, metaData.codecs(i), GettableData.getColumnMetadata(i, Some(metaData)))
         i += 1
       }
     }

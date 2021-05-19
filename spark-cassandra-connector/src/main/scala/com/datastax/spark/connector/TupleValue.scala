@@ -16,11 +16,11 @@ final case class TupleValue(values: Any*) extends ScalaGettableByIndexData with 
 object TupleValue {
 
   def fromJavaDriverTupleValue
-      (value: DriverTupleValue)
+      (value: DriverTupleValue, metadata: Option[CassandraRowMetadata] = None)
       : TupleValue = {
     val values =
       for (i <- 0 until value.getType.getComponentTypes.size()) yield
-        GettableData.get(value, i)
+        GettableData.get(value, i, GettableData.getColumnMetadata(i, metadata))
     new TupleValue(values: _*)
   }
 

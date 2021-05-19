@@ -71,14 +71,21 @@ object GettableData {
 
   /* ByteBuffers are not serializable, so we need to convert them to something that is serializable.
      Array[Byte] seems reasonable candidate. Additionally converts Java collections to Scala ones. */
-  private[connector] def convert(obj: Any): AnyRef = {
+  private[connector] def convert(obj: Any, metadata: Option[CassandraRowMetadata] = None): AnyRef = {
     obj match {
       case bb: ByteBuffer => ByteBufferUtil.toArray(bb)
-      case list: java.util.List[_] => list.view.map(convert).toList
-      case set: java.util.Set[_] => set.view.map(convert).toSet
-      case map: java.util.Map[_, _] => map.view.map { case (k, v) => (convert(k), convert(v))}.toMap
-      case udtValue: DriverUDTValue => UDTValue.fromJavaDriverUDTValue(udtValue)
-      case tupleValue: DriverTupleValue => TupleValue.fromJavaDriverTupleValue(tupleValue)
+      case list: java.util.List[_] =>
+        val typeMetadata = getColumnMetadata(0, metadata)
+        list.view.map(convert(_, typeMetadata)).toList
+      case set: java.util.Set[_] =>
+        val typeMetadata = getColumnMetadata(0, metadata)
+        set.view.map(convert(_,typeMetadata)).toSet
+      case map: java.util.Map[_, _] => map.view.map { case (k, v) =>
+        val keyTypeMetadata = getColumnMetadata(0, metadata)
+        val valueTypeMetadata = getColumnMetadata(1, metadata)
+        (convert(k, keyTypeMetadata), convert(v, valueTypeMetadata))}.toMap
+      case udtValue: DriverUDTValue => UDTValue.fromJavaDriverUDTValue(udtValue, metadata)
+      case tupleValue: DriverTupleValue => TupleValue.fromJavaDriverTupleValue(tupleValue, metadata)
       case localDate: LocalDate =>
         new org.joda.time.LocalDate(localDate.getYear, localDate.getMonth, localDate.getDay)
       case other => other.asInstanceOf[AnyRef]
@@ -86,12 +93,35 @@ object GettableData {
     }
   }
 
+  private[connector] def getColumnMetadata(index: Int, metadata: Option[CassandraRowMetadata]): Option[CassandraRowMetadata] = {
+    metadata match {
+      case Some(m) => m.columnMetadata match {
+        case Some(cm) => cm(index)
+        case None => None
+      }
+      case None => None
+    }
+  }
+
+  private[connector] def getColumnMetadata(columnName: String, metadata: Option[CassandraRowMetadata]): Option[CassandraRowMetadata] = {
+    metadata match {
+      case Some(m) => m.columnMetadata match {
+        case Some(cm) => cm(m.indexOfOrThrow(columnName))
+        case None => None
+      }
+      case None => None
+    }
+  }
+
   /** Deserializes given field from the DataStax Java Driver `Row` into appropriate Java type.
     * If the field is null, returns null (not Scala Option). */
   def get(row: Row, index: Int): AnyRef = {
+    get(row, index, None)
+  }
+  def get(row: Row, index: Int, metadata: Option[CassandraRowMetadata]): AnyRef = {
     val data = row.getObject(index)
     if (data != null)
-      convert(data)
+      convert(data, metadata)
     else
       null
   }
@@ -100,38 +130,53 @@ object GettableData {
   /** Deserializes given field from the DataStax Java Driver `Row` into appropriate Java type by using predefined codec
     * If the field is null, returns null (not Scala Option). */
   def get(row: Row, index: Int, codec: TypeCodec[AnyRef]): AnyRef = {
+    get(row, index, codec, None)
+  }
+  def get(row: Row, index: Int, codec: TypeCodec[AnyRef], metadata: Option[CassandraRowMetadata]): AnyRef = {
     val data = row.get(index, codec)
     if (data != null)
-      convert(data)
+      convert(data, metadata)
     else
       null
   }
 
   def get(row: Row, name: String): AnyRef = {
+    get(row, name, None)
+  }
+  def get(row: Row, name: String, metadata: Option[CassandraRowMetadata]): AnyRef = {
     val index = row.getColumnDefinitions.getIndexOf(name)
     require(index >= 0, s"Column not found in Java driver Row: $name")
-    get(row, index)
+    get(row, index, metadata)
   }
 
   def get(row: Row, name: String, codec: TypeCodec[AnyRef]): AnyRef = {
+    get(row, name, codec, None)
+  }
+  def get(row: Row, name: String, codec: TypeCodec[AnyRef], metadata: Option[CassandraRowMetadata]): AnyRef = {
     val index = row.getColumnDefinitions.getIndexOf(name)
     require(index >= 0, s"Column not found in Java driver Row: $name")
-    get(row, index, codec)
+    get(row, index, codec, metadata)
   }
 
   def get(value: DriverUDTValue, name: String): AnyRef = {
+    get(value, name, None)
+  }
+  def get(value: DriverUDTValue, name: String, metadata: Option[CassandraRowMetadata]): AnyRef = {
     val quotedName = "\"" + name + "\""
     val data = value.getObject(quotedName)
     if (data != null)
-      convert(data)
+      convert(data, metadata)
     else
       null
   }
 
   def get(value: DriverTupleValue, index: Int): AnyRef = {
+    get(value, index, None)
+  }
+  def get(value: DriverTupleValue, index: Int, metadata: Option[CassandraRowMetadata]): AnyRef = {
     val data = value.getObject(index)
     if (data != null)
-      convert(data)
+      convert(data, metadata)
     else
       null
   }

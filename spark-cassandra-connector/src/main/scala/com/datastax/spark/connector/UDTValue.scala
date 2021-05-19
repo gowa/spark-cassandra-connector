@@ -23,10 +23,18 @@ final case class UDTValue(metaData: CassandraRowMetadata, columnValues: IndexedS
 
 object UDTValue {
 
-  def fromJavaDriverUDTValue(value: DriverUDTValue): UDTValue = {
-    val fields = value.getType.getFieldNames.toIndexedSeq
-    val values = fields.map(GettableData.get(value, _))
-    UDTValue(fields, values)
+  def fromJavaDriverUDTValue(value: DriverUDTValue, metadata: Option[CassandraRowMetadata] = None): UDTValue = {
+    val fields = metadata match {
+      case Some(m) => m.columnNames
+      case None => value.getType.getFieldNames.toIndexedSeq
+    }
+
+    val values = fields.map{ field => GettableData.get(value, field, GettableData.getColumnMetadata(field, metadata)) }
+
+    metadata match {
+      case Some(m) => UDTValue(m, values)
+      case None => UDTValue(fields, values)
+    }
   }
 
   def fromMap(map: Map[String, Any]): UDTValue =
