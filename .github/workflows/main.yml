@@ -30,4 +30,5 @@ jobs:
         env:
           TEST_PARALLEL_TASKS: 1
           CCM_CASSANDRA_VERSION: 4.0-beta4
+          PUBLISH_VERSION: test
         run: sbt test it:test
