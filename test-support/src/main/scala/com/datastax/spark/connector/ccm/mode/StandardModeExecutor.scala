@@ -19,7 +19,7 @@ private[mode] trait DefaultExecutor extends ClusterModeExecutor {
   override def start(nodeNo: Int): Unit = {
     val formattedJvmArgs = config.jvmArgs.map(arg => s" --jvm_arg=$arg").mkString(" ")
     try {
-      execute(s"node$nodeNo", "start", formattedJvmArgs + "--wait-for-binary-proto")
+      execute(s"node$nodeNo", "start", formattedJvmArgs + "-v --wait-for-binary-proto")
     } catch {
       case NonFatal(e) =>
         val linesCount = 1000
