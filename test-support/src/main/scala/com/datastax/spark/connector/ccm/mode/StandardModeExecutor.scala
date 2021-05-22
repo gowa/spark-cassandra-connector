@@ -18,7 +18,30 @@ private[mode] trait DefaultExecutor extends ClusterModeExecutor {
 
   override def start(nodeNo: Int): Unit = {
     val formattedJvmArgs = config.jvmArgs.map(arg => s" --jvm_arg=$arg").mkString(" ")
-    execute(s"node$nodeNo", "start", formattedJvmArgs + "--wait-for-binary-proto")
+    try {
+      execute(s"node$nodeNo", "start", formattedJvmArgs + "--wait-for-binary-proto")
+    } catch {
+      case NonFatal(e) =>
+        val linesCount = 1000
+
+        val startupErrors = s"${dir}/ccm_1/node${nodeNo}/logs/startup-stderr*"
+        Try(logger.error(s"Start command failed, here is the last $linesCount lines of stderr: \n" +
+          getLastLogLines(startupErrors, linesCount).mkString("\n")))
+
+        val startupOut = s"${dir}/ccm_1/node${nodeNo}/logs/startup-stdout*"
+        Try(logger.error(s"Start command failed, here is the last $linesCount lines of stdout: \n" +
+          getLastLogLines(startupOut, linesCount).mkString("\n")))
+
+        val debug = s"${dir}/ccm_1/node${nodeNo}/logs/debug.log"
+        Try(logger.error(s"Start command failed, here is the last $linesCount lines of debug log \n" +
+          getLastLogLines(debug, linesCount).mkString("\n")))
+
+        val systemlog = s"${dir}/ccm_1/node${nodeNo}/logs/system.log"
+        Try(logger.error(s"Start command failed, here is the last $linesCount lines of debug log \n" +
+          getLastLogLines(systemlog, linesCount).mkString("\n")))
+
+        throw e
+    }
   }
 
   private def eventually[T](hint: String = "", f: =>T ): T = {

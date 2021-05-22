@@ -38,7 +38,11 @@ private[ccm] trait ClusterModeExecutor {
       "repository",
       "ccm-repository.log").toString
 
-    val command = s"tail -$linesCount $log"
+    getLastLogLines(log, linesCount)
+  }
+
+  def getLastLogLines(path: String, linesCount: Int): Seq[String] = synchronized {
+    val command = s"tail -$linesCount $path"
     CcmBridge.execute(CommandLine.parse(command))
   }
 }
